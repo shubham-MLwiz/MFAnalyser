@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fund Performance Analyzer</title>
+    <style>
+        /* --- Core Styles & Fonts --- */
+        :root {
+            --primary-color: #0A3D62; /* Deep Blue #0A3D62*/
+            --secondary-color: #008080; /* Teal 008080 */
+            --background-color: #f8f9fa;
+            --sidebar-bg: #ffffff;
+            --content-bg: #ffffff;
+            --text-color: #343a40;
+            --border-color: #dee2e6;
+            --rank-good-bg: #e6f4ea;
+            --rank-good-text: #1e4620;
+            --rank-avg-bg: #fffbeB;
+            --rank-avg-text: #744210;
+            --rank-poor-bg: #fde2e2;
+            --rank-poor-text: #9b1c1c;
+            --rank-poorer-bg: #f9d5d5;
+            --rank-poorer-text: #7f1d1d;
+            --row-alt-bg: #f8f9fa;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            margin: 0;
+            line-height: 1.6;
+        }
+        
+        /* --- Top Bar & Logo --- */
+        .top-bar {
+            background-color: var(--content-bg);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            padding: 0 10px;
+            height: 60px;
+            position: sticky;
+            top: 0;
+            z-index: 20;
+        }
+        .sidebar-toggle {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 24px;
+            padding: 10px;
+            color: var(--primary-color);
+        }
+        .logo-placeholder {
+            height: 40px;
+            width: auto;
+            margin-left: 15px;
+        }
+
+        /* --- Main Layout (Sidebar + Content) --- */
+        .analyzer-container { display: flex; min-height: calc(100vh - 60px); }
+        .sidebar { width: 240px; background-color: var(--sidebar-bg); border-right: 1px solid var(--border-color); padding: 20px; flex-shrink: 0; transition: width 0.3s ease, padding 0.3s ease;  position: sticky; top: 60px; height: calc(100vh - 60px); overflow-y: auto; }
+        .sidebar-hidden .sidebar { width: 0; padding: 20px 0; overflow: hidden;}
+
+        .sidebar h2 { font-size: 1.2em; color: var(--primary-color); margin-top: 0; border-bottom: 2px solid var(--primary-color); padding-bottom: 10px; white-space: nowrap; }
+        .category-nav ul { list-style-type: none; padding: 0; margin: 0; }
+        .category-nav li a { display: block; padding: 10px 15px; text-decoration: none; color: var(--primary-color); border-radius: 5px; margin-bottom: 5px; font-weight: 500; transition: background-color 0.2s, color 0.2s; white-space: nowrap; }
+        .category-nav li a:hover { background-color: #f1f3f5; }
+        .category-nav li a.active { background-color: var(--primary-color); color: #fff; font-weight: bold; }
+        .main-content { flex-grow: 1; padding: 20px 30px; overflow-x: hidden; transition: margin-left 0.3s ease; }
+        
+        /* --- General Content Styles --- */
+        .banner-placeholder {
+            width: 100%;
+            height: 150px;
+            background-color: #e9ecef;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            object-fit: cover;
+            color: #6c757d; /* Alt text color */
+        }
+        .content-section {
+            background-color: var(--content-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+            box-shadow: 0 1px 10px rgba(0,0,0,0.05);
+        }
+        .content-section h2 { margin-top: 0; color: var(--primary-color); }
+        .content-section p, .content-section ul { color: #495057; }
+        .content-section ul { padding-left: 20px; }
+        .content-header { margin-bottom: 25px; }
+        .content-header h1 { margin: 0 0 5px 0; font-size: 2em; color: var(--primary-color); }
+        .content-header p { margin: 0; color: #6c757d; font-size: 1.1em; }
+        #score-framework-page { display: none; } /* Hidden by default */
+        #score-framework-page img { max-width: 100%; height: auto; border-radius: 8px; }
+
+        /* --- Table Styles --- */
+        .table-wrapper { overflow-x: auto; margin-bottom: 30px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border: 1px solid var(--border-color); }
+        table { width: 100%; border-collapse: collapse; background: var(--content-bg);  }
+        th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid var(--border-color); white-space: normal; vertical-align: middle; border-right: 1px solid var(--border-color); }
+        th:last-child, td:last-child { border-right: none; }
+        th { background-color: #f8f9fa; font-weight: 600; text-align: center; vertical-align: middle; white-space: nowrap;}
+        tbody tr:nth-child(even) { background-color: var(--row-alt-bg); }
+        tbody tr:hover { background-color: #e9ecef; }
+        .bucket-cell { font-weight: bold; color: var(--primary-color); background-color: #f8f9fa; vertical-align: top; border-right: 1px solid var(--border-color); }
+        .summary-row td { font-weight: bold; background-color: #f8f9fa; color: var(--primary-color); }
+        .summary-row td:first-child { text-align: right; }
+        tfoot td { font-weight: bold; background-color: #f8f9fa; }
+        #ranking-table .wrap-text { min-width: 200px; white-space: normal; }
+        
+        /* --- Verdict Table Specific Styles --- */
+        #verdict-table th { white-space: normal; }
+        #verdict-table .pros-cons-list { margin: 0; padding-left: 18px; }
+        #verdict-table .pros-cons-list li { margin-bottom: 5px; }
+        .verdict-cell { font-size: 1.5em; font-weight: bold; text-align: center; vertical-align: middle; }
+        
+        /* --- Collapsible Section Styles --- */
+        .collapsible-header { background-color: var(--primary-color); color: white; cursor: pointer; padding: 15px; width: 100%; border: none; text-align: left; outline: none; font-size: 1.2em; font-weight: bold; border-radius: 5px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .collapsible-header:hover { background-color: #2c5d7c; }
+        .collapsible-header .toggle-icon { font-size: 1.2em; transition: transform 0.3s ease; }
+        .collapsible-header.active .toggle-icon { transform: rotate(180deg); }
+        .collapsible-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.35s ease-out;
+        }
+
+        /* --- Table Link Button --- */
+        .table-link-btn { background: none; border: none; color: var(--secondary-color); text-decoration: underline; cursor: pointer; font-size: 1em; padding: 0; }
+        .table-link-btn:hover { color: var(--primary-color); }
+
+        /* --- Distinction for Rank Cells --- */
+        .is-rank { font-weight: 500; font-size: 1.1em; text-align: center; border-left: 1px solid #e9ecef; border-right: 1px solid #e9ecef; }
+        th.is-rank { background-color: #e9ecef; }
+        .rank-header { font-weight: bold; color: var(--primary-color); }
+        .wrap-text { white-space: normal; }
+
+        /* --- Color Coding for Ranks & Verdicts --- */
+        .rank-good, .verdict-good { background-color: var(--rank-good-bg); color: var(--rank-good-text); }
+        .rank-avg, .verdict-avg { background-color: var(--rank-avg-bg); color: var(--rank-avg-text); }
+        .rank-poor { background-color: var(--rank-poor-bg); color: var(--rank-poor-text); }
+        .rank-poorer, .verdict-avoid { background-color: var(--rank-poorer-bg); color: var(--rank-poorer-text); }
+
+        /* --- Back to Top Button --- */
+        #back-to-top-btn {
+            display: none;
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            z-index: 99;
+            border: none;
+            outline: none;
+            background-color: var(--primary-color);
+            color: white;
+            cursor: pointer;
+            padding: 10px;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            transition: background-color 0.3s, opacity 0.3s, transform 0.3s;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #back-to-top-btn:hover {
+            background-color: var(--secondary-color);
+            transform: translateY(-2px);
+        }
+
+        /* --- Responsive Design --- */
+        @media (max-width: 768px) {
+            .sidebar { position: fixed; height: 100%; z-index: 10; }
+            .analyzer-container.sidebar-hidden .main-content { margin-left: 0; }
+        }
+    </style>
+</head>
+<body>
+    <header class="top-bar">
+        <button id="sidebar-toggle" class="sidebar-toggle">☰</button>
+        <img src="images/logo.png" alt="Logo" class="logo-placeholder">
+    </header>
+    <div class="analyzer-container" id="analyzer-container">
+        <aside class="sidebar">
+            <h2 id="sidebar-title"></h2>
+            <nav class="category-nav">
+                <ul id="category-list"></ul>
+            </nav>
+        </aside>
+        <main class="main-content">
+            <div id="fund-analysis-page">
+                <img src="images/banner.jpg" alt="Banner Image" class="banner-placeholder">
+                <header class="content-header">
+                    <h1 id="content-title"></h1>
+                    <p id="content-subtitle"></p>
+                </header>
+                
+                <div class="content-section" id="introduction-section">
+                    <h2>Introduction</h2>
+                    <div id="introduction-content"></div>
+                </div>
+
+                <div class="content-section" id="key-callouts-section">
+                    <h2>Key Callouts</h2>
+                    <div id="key-callouts-content"></div>
+                </div>
+
+                <header class="content-header">
+                    <h2>Final Verdict</h2>
+                </header>
+                <div class="table-wrapper">
+                    <table id="verdict-table">
+                        <thead></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+
+                <header class="content-header">
+                    <h2>S.C.O.R.E. Analysis</h2>
+                </header>
+                <div class="table-wrapper">
+                    <table id="ranking-table">
+                        <thead></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+
+                <header class="content-header">
+                    <h2>Detailed Analysis</h2>
+                </header>
+                <div id="collapsible-sections">
+                    <!-- Collapsible sections will be generated here -->
+                </div>
+            </div>
+
+            <div id="score-framework-page">
+                <div class="content-section">
+                    <h2>S.C.O.R.E. Framework</h2>
+                    <img src="images/SCORE_FRAMEWORK.png" alt="S.C.O.R.E. Framework Diagram">
+                </div>
+                <div class="content-section">
+                    <h2>Methodology</h2>
+                    <p>The S.C.O.R.E. Framework is a proprietary, quantitative methodology designed to provide a comprehensive, data-driven evaluation of mutual funds. It systematically assesses funds across five critical pillars, assigning weighted scores to distill complex information into a clear, comparative ranking.</p>
+                    <p>Each pillar is composed of multiple attributes, which are individually ranked based on performance against peers and benchmarks. These ranks are then multiplied by pre-defined weights, reflecting their importance in the overall evaluation. The final "S.C.O.R.E." is the sum of these weighted ranks, offering a holistic measure of a fund's quality and potential.</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <button id="back-to-top-btn" title="Go to top">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 19V5M5 12l7-7 7 7"/>
+        </svg>
+    </button>
+
+    <script>
+    // --- DATA OBJECT ---
+    const allData = {
+        "midCap": {
+            name: "Mid Cap",
+            description: "As of date: 21-Oct-2025"/*${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '-')}`*/,
+            introduction: "<p>Mid-cap funds primarily invest in mid-sized companies, typically those ranked from 101 to 250 by market capitalization.</p><ul><li>SEBI mandate: Mid cap funds  investment  in   equity   & equity  related  instruments  of  Mid cap companies - a minimum of 65% of total assets. </li><li>This category offers a compelling balance between the high-growth potential of small caps and the relative stability of large caps.</li><li>It is an attractive option for investors seeking long-term capital appreciation.</li></ul>",
+            keyCallouts: "<p><strong>Disclaimer:</strong></p><ul><li>Past performance is not indicative of future results.</li><li>All investments are subject to market risks.</li><li>Please consult a financial advisor before making any investment decisions.</li></ul><p>The analysis is based on data as of October 21, 2025.</p><ul><li>SEBI did 'Categorization and Rationalization of Mutual Fund Schemes' around October 2017</li><li>Nippon acquired Reliance AMC in Oct 2019</li><li>Quant acquired Escorts MF in May 2018</li><li>Benchmark Considered : Nifty Midcap 150 TRI</li></ul>",
+            rankingTable: {
+                fundNames: ["Edelweiss", "Invesco", "Motilal Oswal", "Nippon", "Quant"],
+                buckets: [
+                    { name: "Snapshot (5)", attributes: [
+                        { name: "AUM", source: "Overview Table", timeframe: "Recent Data", weight: 3, ranks: [1, 1, 1, 1, 1] },
+                        { name: "Expense Ratio", source: "Overview Table", timeframe: "Recent Data", weight: 2, ranks: [1, 2, 3, 3, 3] }
+                    ]},
+                    { name: "Composition (15)", attributes: [
+                        { name: "PE", source: "Overview Table", timeframe: "Recent Data", weight: 4, ranks: [2, 3, 3, 2, 1] },
+                        { name: "Top 10 Holding %", source: "Overview Table", timeframe: "Recent Data", weight: 4, ranks: [1, 2, 4, 1, 2] },
+                        { name: "Sector wise Allocation", source: "Overview Table", timeframe: "Recent Data", weight: 3, ranks: [1, 1, 4, 1, 1] },
+                        { name: "Market cap wise allocation", source: "Allocation Table", timeframe: "Recent Data", weight: 4, ranks: [2, 3, 4, 2, 1] }
+                    ]},
+                    { name: "Outperformance (45)", attributes: [
+                        { name: "Historical Avg Rolling Return (3Y)", source: "Historical Rolling Return Table", timeframe: "Historical Data", weight: 9, ranks: [2, 3, 2, 3, 1] },
+                        { name: "Historical Avg Rolling Return (5Y)", source: "Historical Rolling Return Table", timeframe: "Historical Data", weight: 8, ranks: [2, 3, 2, 3, 1] },
+                        { name: "Historical Avg Rolling Return (7Y)", source: "Historical Rolling Return Table", timeframe: "Historical Data", weight: 8, ranks: [2, 2, 3, 3, 1] },
+                        { name: "Recent Avg Rolling Return (3Y)", source: "Recent Rolling Return Table", timeframe: "Recent Data", weight: 5, ranks: [2, 2, 1, 2, 3] },
+                        { name: "Recent Avg Rolling Return (2Y)", source: "Recent Rolling Return Table", timeframe: "Recent Data", weight: 5, ranks: [2, 2, 1, 2, 3] },
+                        { name: "Recent Avg Rolling Return (1Y)", source: "Recent Rolling Return Table", timeframe: "Recent Data", weight: 5, ranks: [2, 1, 1, 3, 4] },
+                        { name: "Calendar Year Return", source: "Calendar Return Table", timeframe: "Historical Data", weight: 5, ranks: [2, 3, 1, 2, 1] }
+                    ]},
+                    { name: "Risk (20)", attributes: [
+                        { name: "Alpha (3Y)", source: "Risk Ratio Table", timeframe: "Recent Data", weight: 5, ranks: [2, 1, 2, 3, 4] },
+                        { name: "IR (3Y)", source: "Risk Ratio Table", timeframe: "Recent Data", weight: 5, ranks: [2, 1, 3, 2, 4] },
+                        { name: "Sharpe Ratio (3Y)", source: "Risk Ratio Table", timeframe: "Recent Data", weight: 5, ranks: [2, 1, 2, 2, 3] },
+                        { name: "Market Capture Ratio (5Y)", source: "Capture Ratio Table", timeframe: "Historical Data", weight: 5, ranks: [2, 2, 1, 2, 2] }
+                    ]},
+                    { name: "Expertise (15)", attributes: [
+                        { name: "Manager Annual Turnover Rate(after 2017)", source: "Manager Turnover Table", timeframe: "Historical Data", weight: 5, ranks: [1, 2, 2, 3, 2] },
+                        { name: "Manager Industry Experience (longest serving manager)", source: "Fund Manager Performance Table", timeframe: "Historical Data", weight: 5, ranks: [3, 2, 2, 1, 1] },
+                        { name: "Benchmark vs Manager Performance", source: "Fund Manager Performance Table", timeframe: "Historical Data", weight: 5, ranks: [2, 1, 2, 3, 4] }
+                    ]}
+                ],
+                summary: [
+                    { label: "S.C.O.R.E. (Overall Data)👉", weight: 100, values: [1.88, 1.99, 2.13, 2.32, 2.08] },
+                    { label: "S.C.O.R.E. (Recent Data)👉", weight: 50, values: [1.76, 1.64, 2.30, 2.04, 2.66] },
+                    { label: "S.C.O.R.E. (Historical Data)👉", weight: 50, values: [2.00, 2.34, 1.96, 2.60, 1.50] }
+                ]
+            },
+            verdictTable: [
+                { name: "Edelweiss MidCap Dir Gr", pros: [], cons: ["Fund Managers recently joined the fund"], verdict: 1 },
+                { name: "Invesco India MidCap Dir Gr", pros: [], cons: ["Its barely able to beat the Index (Nifty Midcap 150 TRI) on 3Y, 5Y, 7Y Historical RR basis", "High Allocation in Small Cap", "Fund Managers recently joined the fund"], verdict: 2 },
+                { name: "Motilal Oswal Midcap Fund Dir Gr", pros: ["Historical Rolling Returns", "Recent Rolling Returns"], cons: ["PE, PB much higher compared to peers", "Top 5%, Top 10% stocks concentration is too high", "Only 17 stocks which is very less", "Mid Cap Allocation is too high 76%.", "Picked up trending stocks like Trent, Kalyan", "In Recent downfall (Feb-25-Apr25), it corrected a lot. Performed worst (almost last in all midcap MFs)", "Kalyan Jewellers news. Bribe allegation on AMC managers to buy Kalyan stock. portfolio allocation 10% to kalyan jewellers", "SEBI Fine in June 25", "Fund Managers recently joined the fund", "Overweight on one Sector (Technology)"], verdict: -1 },
+                { name: "Nippon India Gr Mid Cap Fund Dir Plan Gr", pros: [], cons: ["Its barely able to beat the Index (Nifty Midcap 150 TRI) on 3Y, 5Y, 7Y Historical RR basis", "Fund Managers recently joined the fund"], verdict: -1 },
+                { name: "Quant MidCap Gr Dir", pros: ["PE, PB Ratio is good", "Quant holding decent cash in this market", "Best Historical Rolling Returns"], cons: ["Portfolio Turnover is too high", "Worst Recent Rolling Returns and Alpha"], verdict: 3 }
+            ],
+            overviewTable: {
+                title: "Overview Table",
+                headers: ["Attribute", "Edelweiss Mid Cap Dir", "Invesco India Mid cap Dir", "Motilal Oswal Midcap Dir", "Nippon India Growth Mid Cap Dir", "Quant Mid Cap Dir"],
+                rows: [ 
+                    { attribute: "Category", values: ["Equity: Mid Cap", "Equity: Mid Cap", "Equity: Mid Cap", "Equity: Mid Cap", "Equity: Mid Cap"] }, 
+                    { attribute: "Net Asset(₹ Cr)", values: ["11,731", "8,518", "34,749", "39,329", "8,262"] }, 
+                    { attribute: "Return Since Launch (%)", values: [22.14, 21.82, 23.77, 18.84, 17.46] }, 
+                    { attribute: "Riskometer", values: ["Very High", "Very High", "Very High", "Very High", "Very High"] }, 
+                    { attribute: "Exit Load (Days)", values: ["1.00 (90)", "1.00 (365)", "1.00 (365)", "1.00 (30)", "0.50 (90)"] }, 
+                    { attribute: "Expense Ratio (%)", values: [0.38, 0.54, 0.7, 0.75, 0.71] }, 
+                    { attribute: "Fund Age", values: ["12Y 9M", "12Y 9M", "11Y 7M", "12Y 9M", "12Y 9M"] }, 
+                    { attribute: "Portfolio Turnover (%)", values: [43, 40, 133, 7, 339] }, 
+                    { attribute: "Portfolio P/B Ratio", values: [5.05, 5.44, 8.84, 4.04, 3.01] }, 
+                    { attribute: "Portfolio P/E Ratio", values: [34.01, 42.56, 65.71, 27.53, 15.24] }, 
+                    { attribute: "No. of Stocks", values: [85, 48, 17, 95, 27] }, 
+                    { attribute: "Top 3 Sectors %", values: [55, 65.76, 81.53, 59.35, 51.35] }, 
+                    { attribute: "Top 5 % Stocks", values: [12.8, 23.34, 44.39, 12.9, 35.62] }, 
+                    { attribute: "Top 10 % Stocks", values: [23.26, 41.06, 75.02, 22.85, 57.51] }, 
+                    { attribute: "Financial", values: [25.18, 31.63, 3.15, 23.62, 11.89] }, 
+                    { attribute: "Industrials", values: [16.45, 5.9, 19.54, 18.55, 16.36] }, 
+                    { attribute: "Consumer Discretionary", values: [13.37, 11.54, 27.26, 17.18, 0.44] }, 
+                    { attribute: "Materials", values: [10.57, 5.47, 2.25, 5.55, 9.06] }, 
+                    { attribute: "Healthcare", values: [10.48, 18.34, 1.69, 11.5, 16.02] }, 
+                    { attribute: "Technology", values: [8.41, 15.79, 34.73, 7.65, 12.07] }, 
+                    { attribute: "Consumer Staples", values: [6.24, 2.1, "--", 4.17, 4.71] }, 
+                    { attribute: "Energy & Utilities", values: [2.98, "--", "--", 6.63, 18.97] }, 
+                    { attribute: "Real Estate", values: [2.72, 7.62, 2.39, 1.43, "--"] }, 
+                    { attribute: "Aum Rank", values: [1, 1, 1, 1, 1] }, 
+                    { attribute: "Expense Ratio (%) Rank", values: [1, 2, 3, 3, 3] }, 
+                    { attribute: "Portfolio P/E Ratio Rank", values: [2, 3, 3, 2, 1] }, 
+                    { attribute: "Top 10% Stock Rank", values: [1, 2, 4, 1, 2] }, 
+                    { attribute: "Sector Wise Allocation Rank", values: [1, 1, 4, 1, 1] }
+                ]
+            },
+            allocationTable: {
+                title: "Allocation Table",
+                headers: ["Fund Name", "Large Cap (%)", "Mid Cap (%)", "Small Cap (%)", "Cash + Bonds (%)", "Rank"],
+                rows: [ { name: "Edelweiss MidCap Dir Gr", values: [17.69, 66.89, 12.27, 3.15, 2] }, { name: "Invesco India MidCap Dir Gr", values: [16.1, 62.33, 20.74, 0.83, 3] }, { name: "Motilal Oswal Midcap Fund Dir Gr", values: [21.38, 76.05, "-", 2.57, 4] }, { name: "Nippon India Gr Mid Cap Fund Dir Plan Gr", values: [21.22, 66.24, 10.12, 2.42, 2] }, { name: "Quant MidCap Gr Dir", values: [15.44, 59.18, 6.59, 18.79, 1] } ],
+                footer: { name: "Category Avg.", values: [12.71, 66.87, 15.36, 5.06, ""] }
+            },
+            historicalRollingReturnTable: {
+                title: "Historical Rolling Return Table",
+                headers: ["Fund Name", "Average", "Median", ">15% return", "Average", "Median", ">15% return", "Average", "Median", ">15% return", "3Y RR", "5Y RR", "7Y RR"],
+                subHeaders: ["3Y Rolling Return", "5Y Rolling Return", "7Y Rolling Return", "Average Historical Rolling Return Rank (Manually Calculated)"],
+                rows: [
+                    { name: "Edelweiss MidCap Dir Gr", values: [25.32, 27.26, 87.49, 25.36, 26.75, 85.35, 19.18, 19.11, 94.7, 2, 2, 2] },
+                    { name: "Invesco India MidCap Dir Gr", values: [23.62, 25.01, 89.58, 23.67, 23.96, 87.5, 18.8, 18.86, 92.98, 3, 3, 2] },
+                    { name: "Motilal Oswal Midcap Fund Dir Gr", values: [27.3, 28.76, 81.52, 27.11, 27.88, 96.1, 18.51, 17.26, 87.59, 2, 2, 3] },
+                    { name: "Nippon India Gr Mid Cap Fund Dir Plan Gr", values: [24.91, 26.22, 87.49, 24.89, 25.88, 84.01, 18.37, 17.89, 89.21, 3, 3, 3] },
+                    { name: "Quant MidCap Gr Dir", values: [29.73, 31.77, 91.69, 29.59, 30.15, 100, 20.4, 19.6, 96.12, 1, 1, 1] }
+                ],
+                footer: [
+                    { name: "NIFTY MIDCAP 150 TRI", values: [23.25, 24.46, 86.6, 23.22, 24.66, 77.69, 17.8, 17.58, 93.35, "", "", ""] }
+                ]
+            },
+            recentRollingReturnTable: {
+                title: "Recent Rolling Return Table",
+                headers: ["Fund Name", "Average", "Median", ">15% return", "Average", "Median", ">15% return", "Average", "Median", ">15% return", "3Y RR", "2Y RR", "1Y RR"],
+                subHeaders: ["3Y Rolling Return", "2Y Rolling Return", "1Y Rolling Return", "Average Recent Rolling Return Rank (Manually Calculated)"],
+                rows: [
+                    { name: "Edelweiss MidCap Dir Gr", values: [26.6, 25.98, 100, 34.14, 34.56, 100, 22.22, 16.19, 55.02, 2, 2, 2] },
+                    { name: "Invesco India MidCap Dir Gr", values: [26.84, 26.8, 100, 34.97, 34.97, 100, 25.89, 19.31, 77.51, 2, 2, 1] },
+                    { name: "Motilal Oswal Midcap Fund Dir Gr", values: [31.8, 31.03, 100, 37.94, 36.52, 100, 26.14, 17.91, 60.64, 1, 1, 1] },
+                    { name: "Nippon India Gr Mid Cap Fund Dir Plan Gr", values: [26.05, 25.62, 100, 32.27, 33.11, 100, 16.64, 11.73, 37.76, 2, 2, 3] },
+                    { name: "Quant MidCap Gr Dir", values: [22.68, 23.07, 100, 25.16, 26.48, 90.72, 2.87, -5.16, 26.1, 3, 3, 4] }
+                ],
+                footer: [
+                    { name: "NIFTY MIDCAP 150 TRI", values: [23.32, 22.74, 100, 28.72, 29.88, 100, 12.11, 6.57, 28.63, "", "", ""] }
+                ]
+            },
+            calendarReturnTable: {
+                title: "Calendar Return Table",
+                headers: ["Fund Name", "2024", "2023", "2022", "2021", "2020", "Average", "Std Dev", "Std Dev Rank", "2024 Rank", "2023 Rank", "2022 Rank", "2021 Rank", "2020 Rank", "Sum of Rank", "Calendar Yr Retrun Rank"],
+                rows: [
+                    { name: "Edelweiss MidCap Dir Gr", values: ["40.42%", "40.44%", "3.98%", "52.45%", "28.45%", "33.15%", "18.38%", 4, 3, 3, 4, 3, 2, 19, 2] },
+                    { name: "Invesco India MidCap Dir Gr", values: ["44.52%", "35.85%", "1.98%", "45%", "26.13%", "30.74%", "17.85%", 2, 2, 5, 5, 5, 3, 22, 3] },
+                    { name: "Motilal Oswal Midcap Fund Dir Gr", values: ["58.26%", "43.26%", "11.98%", "57.78%", "10.67%", "36.39%", "23.67%", 5, 1, 2, 2, 1, 5, 16, 1] },
+                    { name: "Nippon India Gr Mid Cap Fund Dir Plan Gr", values: ["27.68%", "49.76%", "6.67%", "47.56%", "22.90%", "30.91%", "17.99%", 3, 4, 1, 3, 4, 4, 19, 2] },
+                    { name: "Quant MidCap Gr Dir", values: ["20.09%", "36.40%", "19.94%", "53.85%", "44.31%", "34.92%", "14.94%", 1, 5, 4, 1, 2, 1, 14, 1] }
+                ],
+                footer: { name: "NIFTY MIDCAP 150 TRI", values: ["24.46%", "44.61%", "3.91%", "48.16%", "-", "30.29%", "20.45%", "", "", "", "", "", "", "", ""] }
+            },
+            riskRatioTable: {
+                title: "Risk Ratio (3Y) Table",
+                headers: ["Edelweiss Mid Cap Dir Gr", "Invesco India Mid Cap Dir Gr", "Motilal Oswal Midcap Dir Gr", "Nippon India Growth Mid Cap Dir", "Quant Mid Cap Dir Gr"],
+                rows: [
+                    { attribute: "Alpha (3yr)", values: [3.09, 5.4, 3.87, 2.7, -3.52] },
+                    { attribute: "Beta (3yr)", values: [0.92, 0.93, 0.89, 0.93, 0.95] },
+                    { attribute: "Information ratio (3yr)", values: [0.47, 0.86, 0.23, 0.56, -0.73] },
+                    { attribute: "R-Squared (3yr)", values: ["90.22%", "86.01%", "66.06%", "94.14%", "81.53%"] },
+                    { attribute: "Sharpe Ratio (3yr)", values: [1.13, 1.24, 1.01, 1.12, 0.67] },
+                    { attribute: "Standard Deviation (3yr)", values: ["15.54%", "16.00%", "17.62%", "15.45%", "16.84%"] },
+                    { attribute: "Tracking Error (3yr)", values: ["5.02%", "6.10%", "10.39%", "3.88%", "7.27%"] },
+                    { attribute: "Alpha (3yr) Rank", values: [2, 1, 2, 3, 4] },
+                    { attribute: "Information ratio (3yr) Rank", values: [2, 1, 3, 2, 4] },
+                    { attribute: "Sharpe Ratio (3yr) Rank", values: [2, 1, 2, 2, 3] }
+                ]
+            },
+            captureRatioTable: {
+                title: "Capture Ratio (5Y) Table",
+                headers: ["Fund Name", "Up Market Capture Ratio (%)", "Down Market Capture Ratio (%)", "Capture Ratio", "Capture Ratio Rank"],
+                rows: [
+                    { name: "Edelweiss MidCap Dir Gr", values: [102, 88, 1.16, 2] },
+                    { name: "Invesco India MidCap Dir Gr", values: [98, 87, 1.12, 2] },
+                    { name: "Motilal Oswal Midcap Fund Dir Gr", values: [98, 63, 1.57, 1] },
+                    { name: "Nippon India Gr Mid Cap Fund Dir Plan Gr", values: [100, 86, 1.15, 2] },
+                    { name: "Quant MidCap Gr Dir", values: [95, 83, 1.15, 2] }
+                ]
+            },
+            managerTurnoverTable: {
+                title: "Manager Turnover Table",
+                headers: ["Turnover Metrics", "Edelweiss Mid Cap Dir Gr", "Invesco India Mid Cap Dir Gr", "Motilal Oswal Midcap Dir Gr", "Nippon India Growth Mid Cap Dir", "Quant Mid Cap Dir Gr"],
+                rows: [
+                    { metric: "# of managers currently in the fund (2025)", values: [3, 2, 4, 1, 7] },
+                    { metric: "# of managers left the fund (2005-2025)", values: [3, 5, 5, 8, 9] },
+                    { metric: "Annual Turnover Rate (2005-2025)", values: [0.15, 0.25, 0.25, 0.4, 0.45] },
+                    { metric: "Avg Manager Tenure (2005-2025) (Yrs)", values: [3.33, 2.86, 2.22, 2.22, 1.25] },
+                    { metric: "# of managers left the fund (2017-2025)", values: [3, 4, 4, 8, 5] },
+                    { metric: "Annual Turnover Rate (2017-2025)", values: [0.375, 0.5, 0.5, 1, 0.625] },
+                    { metric: "Avg Manager Tenure (2017-2025) (Yrs)", values: [1.33, 1.33, 1, 0.89, 0.67] },
+                    { metric: "Annual Turnover Rate (2017-2025) Rank", values: [1, 2, 2, 3, 2] }
+                ]
+            },
+            fundManagerPerformanceTable: {
+                title: "Fund Manager Performance Table",
+                headers: ["Fund Name", "Name", "Current Years in the Fund (Years)", "Industry Experience (Years)", "Tenure Performance", "Index Performance (Tenure)", "Tenure Weighted Outperformance", "Avg Tenure Weighted Outperformance", "Industry Experience (longest serving manager) Rank", "Tenure Weighted Outperformance Rank"],
+                funds: [
+                    { name: "Edelweiss Mid Cap Dir Gr", managers: [
+                        { name: "Trideep Bhattacharya", values: [4, 17, "21.20%", "17.58%", "14.48%", "4.63%", 3, 2] },
+                        { name: "Raj Koradia", values: [1, 9, "6.56%", "-2.48%", "9.04%", "4.63%"] },
+                        { name: "Dhruv Bhatia", values: [1, 14, "0.47%", "-3.81%", "4.28%", "4.63%"] }
+                    ]},
+                    { name: "Invesco India Mid Cap Dir Gr", managers: [
+                        { name: "Amit B. Ganatra", values: [2, 23, "30.46%", "21.29%", "18.34%", "9.95%", 2, 1] },
+                        { name: "Aditya Khemani", values: [2, 18, "32.24%", "21.51%", "21.46%", "9.95%"] }
+                    ]},
+                    { name: "Motilal Oswal Midcap Dir Gr", managers: [
+                        { name: "Niket Shah", values: [5, 16, "36.01%", "28.45%", "37.80%", "6.20%", 2, 2] },
+                        { name: "Rakesh Shetty", values: [3, 3, "29.71%", "24.76%", "14.85%", "6.20%"] },
+                        { name: "Sunil Sawant", values: [1, 17, "7.48%", "0.38%", "7.10%", "6.20%"] },
+                        { name: "Ajay Khandelwal", values: [1, 21, "-3.24%", "-5.44%", "2.20%", "6.20%"] }
+                    ]},
+                    { name: "Nippon India Growth Mid Cap Dir Gr", managers: [
+                        { name: "Rupesh Patel", values: [3, 25, "28.03%", "25.68%", "7.05%", "2.35%", 1, 3] }
+                    ]},
+                    { name: "Quant Mid Cap Dir Gr", managers: [
+                        { name: "Sanjeev Sharma", values: [9, 22, "20.98%", "16.94%", "36.36%", "-0.50%", 1, 4] },
+                        { name: "Ankit A. Pande", values: [5, 15, "32.55%", "30.73%", "9.10%", "-0.50%"] },
+                        { name: "Sandeep Tandon", values: [1, 27, "5.93%", "14.78%", "-8.85%", "-0.50%"] },
+                        { name: "Varun Pattani", values: [1, 11, "5.93%", "14.78%", "-8.85%", "-0.50%"] },
+                        { name: "Ayusha Kumbhat", values: [1, 2, "12.23%", "25.27%", "-13.04%", "-0.50%"] },
+                        { name: "Yug Tibrewal", values: [1, 1, "16.94%", "29.09%", "-12.15%", "-0.50%"] },
+                        { name: "Sameer Kate", values: [1, 21, "16.94%", "29.09%", "-12.15%", "-0.50%"] }
+                    ]}
+                ]
+            }
+        }
+    };
+
+    // --- DOM ELEMENTS ---
+    const analyzerContainer = document.getElementById('analyzer-container');
+    const sidebarToggle = document.getElementById('sidebar-toggle');
+    const sidebarTitle = document.getElementById('sidebar-title');
+    const categoryList = document.getElementById('category-list');
+    const contentTitle = document.getElementById('content-title');
+    const contentSubtitle = document.getElementById('content-subtitle');
+    const introductionContent = document.getElementById('introduction-content');
+    const keyCalloutsContent = document.getElementById('key-callouts-content');
+    const fundAnalysisPage = document.getElementById('fund-analysis-page');
+    const scoreFrameworkPage = document.getElementById('score-framework-page');
+    const rankingTable = document.getElementById('ranking-table');
+    const verdictTable = document.getElementById('verdict-table');
+    const collapsibleSectionsContainer = document.getElementById('collapsible-sections');
+    const backToTopBtn = document.getElementById('back-to-top-btn');
+
+    /** Renders all data for a given category. */
+    function renderCategoryData(categoryKey) {
+        const categoryData = allData[categoryKey];
+        if (!categoryData) return;
+
+        // Show fund page, hide framework page
+        fundAnalysisPage.style.display = 'block';
+        scoreFrameworkPage.style.display = 'none';
+
+        // Populate content
+        contentTitle.textContent = `${categoryData.name} Funds Analysis`;
+        contentSubtitle.textContent = categoryData.description;
+        introductionContent.innerHTML = categoryData.introduction;
+        keyCalloutsContent.innerHTML = categoryData.keyCallouts;
+
+        renderRankingTable(categoryData);
+        renderVerdictTable(categoryData);
+        renderCollapsibleSections(categoryData);
+    }
+    
+    /** Shows the S.C.O.R.E. framework page */
+    function showFrameworkPage() {
+        fundAnalysisPage.style.display = 'none';
+        scoreFrameworkPage.style.display = 'block';
+    }
+
+    /** Helper function to apply rank classes */
+    function applyRankClasses(cell, value) {
+        if (isNaN(value)) return;
+        cell.classList.add('is-rank');
+        if (value === 1) cell.classList.add('rank-good');
+        else if (value === 2) cell.classList.add('rank-avg');
+        else if (value === 3) cell.classList.add('rank-poor');
+        else if (value >= 4) cell.classList.add('rank-poorer');
+    }
+
+    /** Renders the main ranking table. */
+    function renderRankingTable(categoryData) {
+        const tableData = categoryData.rankingTable;
+        const thead = rankingTable.querySelector('thead');
+        const tbody = rankingTable.querySelector('tbody');
+        thead.innerHTML = '';
+        tbody.innerHTML = '';
+
+        const hr1 = document.createElement('tr');
+        hr1.innerHTML = `<th rowspan="2">Framework Pillars</th><th colspan="3">Details</th><th colspan="5" class="is-rank">Ranks</th>`;
+        
+        const hr2 = document.createElement('tr');
+        ["Attributes", "Data Timeframe", "Weights"].forEach(h => hr2.innerHTML += `<th>${h}</th>`);
+        
+        tableData.fundNames.forEach(name => hr2.innerHTML += `<th class="is-rank">${name}</th>`);
+        
+        thead.appendChild(hr1);
+        thead.appendChild(hr2);
+
+        tableData.buckets.forEach(bucket => {
+            bucket.attributes.forEach((attr, attrIndex) => {
+                const row = document.createElement('tr');
+                if (attrIndex === 0) {
+                    row.innerHTML += `<td class="bucket-cell" rowspan="${bucket.attributes.length}">${bucket.name}</td>`;
+                }
+
+                const attrCell = document.createElement('td');
+                attrCell.className = 'wrap-text';
+                
+                const sourceMap = {
+                    "Overview Table": "overview-table",
+                    "Allocation Table": "allocation-table",
+                    "Historical Rolling Return Table": "historical-rolling-return-table",
+                    "Recent Rolling Return Table": "recent-rolling-return-table",
+                    "Calendar Return Table": "calendar-return-table",
+                    "Risk Ratio Table": "risk-ratio-table",
+                    "Capture Ratio Table": "capture-ratio-table",
+                    "Manager Turnover Table": "manager-turnover-table",
+                    "Fund Manager Performance Table": "fund-manager-performance-table"
+                };
+
+                if (sourceMap[attr.source]) {
+                    attrCell.innerHTML = `<button class="table-link-btn" data-target-id="${sourceMap[attr.source]}">${attr.name}</button>`;
+                } else {
+                    attrCell.textContent = attr.name;
+                }
+
+                row.appendChild(attrCell);
+                row.innerHTML += `<td>${attr.timeframe}</td><td>${attr.weight}</td>`;
+
+                attr.ranks.forEach(rank => {
+                    const cell = document.createElement('td');
+                    cell.textContent = rank;
+                    applyRankClasses(cell, rank);
+                    row.appendChild(cell);
+                });
+                tbody.appendChild(row);
+            });
+        });
+
+        tableData.summary.forEach(summaryRow => {
+            const row = document.createElement('tr');
+            row.className = 'summary-row';
+            row.innerHTML = `<td colspan="3">${summaryRow.label}</td><td>${summaryRow.weight}</td>`;
+            summaryRow.values.forEach(val => {
+                const cell = document.createElement('td');
+                cell.textContent = val;
+                cell.classList.add('is-rank');
+                if (val < 1.9) cell.classList.add('rank-good');
+                else if (val < 2.5) cell.classList.add('rank-avg');
+                else cell.classList.add('rank-poor');
+                row.appendChild(cell);
+            });
+            tbody.appendChild(row);
+        });
+    }
+
+    /** Renders the verdict table. */
+    function renderVerdictTable(categoryData) {
+        const tableData = categoryData.verdictTable;
+        const thead = verdictTable.querySelector('thead');
+        const tbody = verdictTable.querySelector('tbody');
+        thead.innerHTML = '';
+        tbody.innerHTML = '';
+
+        const headerRow = document.createElement('tr');
+        headerRow.innerHTML = `<th>Fund Name</th><th>Pros</th><th>Cons</th><th>Final Verdict</th>`;
+        thead.appendChild(headerRow);
+
+        tableData.forEach(item => {
+            const row = document.createElement('tr');
+            const prosList = item.pros.length > 0 ? `<ul class="pros-cons-list">${item.pros.map(p => `<li>${p}</li>`).join('')}</ul>` : '-';
+            const consList = item.cons.length > 0 ? `<ul class="pros-cons-list">${item.cons.map(c => `<li>${c}</li>`).join('')}</ul>` : '-';
+            
+            let verdictClass = '';
+            if (item.verdict === 1) verdictClass = 'verdict-good';
+            else if (item.verdict === 2) verdictClass = 'verdict-avg';
+            else if (item.verdict === 3) verdictClass = 'verdict-poor';
+            else if (item.verdict === -1) verdictClass = 'verdict-avoid';
+            
+            row.innerHTML = `<td>${item.name}</td><td>${prosList}</td><td>${consList}</td><td class="verdict-cell ${verdictClass}">${item.verdict}</td>`;
+            tbody.appendChild(row);
+        });
+    }
+
+    /** Renders all collapsible sections. */
+    function renderCollapsibleSections(categoryData) {
+        collapsibleSectionsContainer.innerHTML = ''; // Clear previous
+        const tablesToRender = [
+            { id: 'overview-table', data: categoryData.overviewTable, renderer: renderSnapshotTable },
+            { id: 'allocation-table', data: categoryData.allocationTable, renderer: renderSimpleTableWithFooter },
+            { id: 'historical-rolling-return-table', data: categoryData.historicalRollingReturnTable, renderer: renderComplexHeaderTable },
+            { id: 'recent-rolling-return-table', data: categoryData.recentRollingReturnTable, renderer: renderComplexHeaderTable },
+            { id: 'calendar-return-table', data: categoryData.calendarReturnTable, renderer: renderSimpleTableWithFooter },
+            { id: 'risk-ratio-table', data: categoryData.riskRatioTable, renderer: renderSnapshotTable },
+            { id: 'capture-ratio-table', data: categoryData.captureRatioTable, renderer: renderSimpleTable },
+            { id: 'manager-turnover-table', data: categoryData.managerTurnoverTable, renderer: renderSnapshotTable },
+            { id: 'fund-manager-performance-table', data: categoryData.fundManagerPerformanceTable, renderer: renderFundManagerPerformanceTable }
+        ];
+
+        tablesToRender.forEach(table => {
+            if (table.data) {
+                table.renderer(table.data, table.id);
+            }
+        });
+    }
+    
+    function createCollapsibleContainer(id, title) {
+        const container = document.createElement('div');
+        container.id = id + '-container';
+        container.innerHTML = `
+            <button class="collapsible-header">
+                <span>${title}</span>
+                <span class="toggle-icon">▼</span>
+            </button>
+            <div class="collapsible-content">
+                <div class="table-wrapper">
+                    <table id="${id}-element"></table>
+                </div>
+            </div>`;
+        collapsibleSectionsContainer.appendChild(container);
+        return document.getElementById(`${id}-element`);
+    }
+
+    /** Generic renderer for simple tables like Snapshot, Risk Ratio, Manager Turnover */
+    function renderSnapshotTable(tableData, id) {
+        const tableElement = createCollapsibleContainer(id, tableData.title);
+        const thead = document.createElement('thead');
+        const tbody = document.createElement('tbody');
+        const headerRow = document.createElement('tr');
+        const isFundHeader = tableData.headers[0].includes("Dir Gr");
+        headerRow.innerHTML = `<th>${isFundHeader ? "Attribute" : tableData.headers[0]}</th>`;
+        const dataHeaders = isFundHeader ? tableData.headers : tableData.headers.slice(1);
+        dataHeaders.forEach(h => headerRow.innerHTML += `<th>${h}</th>`);
+        thead.appendChild(headerRow);
+        
+        const rowHeaderKey = tableData.rows[0].attribute ? "attribute" : "metric";
+        tableData.rows.forEach(rowData => {
+            const row = document.createElement('tr');
+            const isRankRow = rowData[rowHeaderKey].includes('Rank');
+            const cell = document.createElement('td');
+            cell.textContent = rowData[rowHeaderKey];
+            if(isRankRow) cell.classList.add('rank-header');
+            row.appendChild(cell)
+
+            rowData.values.forEach(val => {
+                const cell = document.createElement('td');
+                cell.textContent = val;
+                if (isRankRow) {
+                    applyRankClasses(cell, parseFloat(val));
+                }
+                row.appendChild(cell);
+            });
+            tbody.appendChild(row);
+        });
+
+        tableElement.appendChild(thead);
+        tableElement.appendChild(tbody);
+    }
+    
+    /** Generic renderer for simple tables like Capture Ratio */
+    function renderSimpleTable(tableData, id) {
+        const tableElement = createCollapsibleContainer(id, tableData.title);
+        const thead = document.createElement('thead');
+        const tbody = document.createElement('tbody');
+        const headerRow = document.createElement('tr');
+        tableData.headers.forEach(h => {
+            const th = document.createElement('th');
+            th.textContent = h;
+            if (h.includes('Rank')) {
+                th.classList.add('is-rank', 'rank-header');
+            }
+            headerRow.appendChild(th);
+        });
+        thead.appendChild(headerRow);
+
+        tableData.rows.forEach(rowData => {
+            const row = document.createElement('tr');
+            row.innerHTML = `<td>${rowData.name}</td>`;
+            rowData.values.forEach((val, index) => {
+                const cell = document.createElement('td');
+                cell.textContent = val;
+                // Check if the column is a rank column
+                if (tableData.headers[index + 1].includes('Rank')) {
+                    applyRankClasses(cell, parseFloat(val));
+                }
+                row.appendChild(cell);
+            });
+            tbody.appendChild(row);
+        });
+        tableElement.appendChild(thead);
+        tableElement.appendChild(tbody);
+    }
+
+    /** Generic renderer for simple tables with a footer like Calendar Return and Allocation */
+     function renderSimpleTableWithFooter(tableData, id) {
+        const tableElement = createCollapsibleContainer(id, tableData.title);
+        const thead = document.createElement('thead');
+        const tbody = document.createElement('tbody');
+        const tfoot = document.createElement('tfoot');
+
+        const headerRow = document.createElement('tr');
+        tableData.headers.forEach(h => {
+             const th = document.createElement('th');
+            th.textContent = h;
+            if (h.includes('Rank')) {
+                th.classList.add('is-rank', 'rank-header');
+            }
+            headerRow.appendChild(th);
+        });
+        thead.appendChild(headerRow);
+
+        tableData.rows.forEach(rowData => {
+            const row = document.createElement('tr');
+            row.innerHTML = `<td>${rowData.name}</td>`;
+            rowData.values.forEach((val, index) => {
+                const cell = document.createElement('td');
+                cell.textContent = val;
+                if (tableData.headers[index + 1] && tableData.headers[index + 1].includes('Rank')) {
+                   applyRankClasses(cell, parseFloat(val));
+                }
+                 row.appendChild(cell);
+            });
+            tbody.appendChild(row);
+        });
+        
+        if (tableData.footer) {
+            const footerRow = document.createElement('tr');
+            footerRow.innerHTML = `<td>${tableData.footer.name}</td>`;
+            tableData.footer.values.forEach(val => footerRow.innerHTML += `<td>${val}</td>`);
+            tfoot.appendChild(footerRow);
+        }
+        
+        tableElement.appendChild(thead);
+        tableElement.appendChild(tbody);
+        tableElement.appendChild(tfoot);
+    }
+
+    /** Renderer for tables with complex multi-level headers like Rolling Returns */
+    function renderComplexHeaderTable(tableData, id) {
+        const tableElement = createCollapsibleContainer(id, tableData.title);
+        const thead = document.createElement('thead');
+        const tbody = document.createElement('tbody');
+        const tfoot = document.createElement('tfoot');
+
+        const hr1 = document.createElement('tr');
+        hr1.innerHTML = `<th rowspan="2">${tableData.headers[0]}</th>`;
+        hr1.innerHTML += `<th colspan="3">${tableData.subHeaders[0]}</th>`;
+        hr1.innerHTML += `<th colspan="3">${tableData.subHeaders[1]}</th>`;
+        hr1.innerHTML += `<th colspan="3">${tableData.subHeaders[2]}</th>`;
+        hr1.innerHTML += `<th colspan="3" class="is-rank wrap-text rank-header">${tableData.subHeaders[3]}</th>`;
+
+        const hr2 = document.createElement('tr');
+        for (let i = 0; i < 3; i++) {
+             hr2.innerHTML += `<th>${tableData.headers[1]}</th><th>${tableData.headers[2]}</th><th>${tableData.headers[3]}</th>`;
+        }
+        hr2.innerHTML += `<th class="is-rank rank-header">${tableData.headers[10]}</th><th class="is-rank rank-header">${tableData.headers[11]}</th><th class="is-rank rank-header">${tableData.headers[12]}</th>`;
+
+        thead.appendChild(hr1);
+        thead.appendChild(hr2);
+
+        tableData.rows.forEach(rowData => {
+            const row = document.createElement('tr');
+            row.innerHTML = `<td>${rowData.name}</td>`;
+            rowData.values.forEach((val, index) => {
+                const cell = document.createElement('td');
+                cell.textContent = val;
+                if (index >= 9) { // The last 3 columns are ranks
+                    applyRankClasses(cell, parseFloat(val));
+                }
+                row.appendChild(cell);
+            });
+            tbody.appendChild(row);
+        });
+
+        if (tableData.footer) {
+            tableData.footer.forEach(footerData => {
+                const footerRow = document.createElement('tr');
+                footerRow.innerHTML = `<td>${footerData.name}</td>`;
+                footerData.values.forEach(val => footerRow.innerHTML += `<td>${val}</td>`);
+                tfoot.appendChild(footerRow);
+            });
+        }
+
+        tableElement.appendChild(thead);
+        tableElement.appendChild(tbody);
+        tableElement.appendChild(tfoot);
+    }
+    
+    /** Special renderer for Fund Manager Performance table with rowspans */
+    function renderFundManagerPerformanceTable(tableData, id) {
+        const tableElement = createCollapsibleContainer(id, tableData.title);
+        const thead = document.createElement('thead');
+        const tbody = document.createElement('tbody');
+        const headerRow = document.createElement('tr');
+        tableData.headers.forEach(h => {
+            const th = document.createElement('th');
+            th.textContent = h;
+            th.classList.add('wrap-text');
+            if (h.includes('Rank')) {
+                th.classList.add('is-rank', 'rank-header');
+            }
+            headerRow.appendChild(th);
+        });
+        thead.appendChild(headerRow);
+
+        tableData.funds.forEach(fund => {
+            fund.managers.forEach((manager, index) => {
+                const row = document.createElement('tr');
+                
+                // Add Fund Name cell with rowspan on the first manager row
+                if (index === 0) {
+                    const fundCell = document.createElement('td');
+                    fundCell.rowSpan = fund.managers.length;
+                    fundCell.textContent = fund.name;
+                    row.appendChild(fundCell);
+                }
+
+                // Add manager-specific cells (Name + first 6 values)
+                row.innerHTML += `<td>${manager.name}</td>`;
+                manager.values.slice(0, 6).forEach(val => {
+                    row.innerHTML += `<td>${val}</td>`;
+                });
+
+                // Add Rank cells with rowspan on the first manager row
+                if (index === 0) {
+                    const rank1 = manager.values[6];
+                    const rank2 = manager.values[7];
+
+                    const rankCell1 = document.createElement('td');
+                    rankCell1.textContent = rank1;
+                    rankCell1.rowSpan = fund.managers.length;
+                    applyRankClasses(rankCell1, parseFloat(rank1));
+                    
+                    const rankCell2 = document.createElement('td');
+                    rankCell2.textContent = rank2;
+                    rankCell2.rowSpan = fund.managers.length;
+                    applyRankClasses(rankCell2, parseFloat(rank2));
+
+                    row.appendChild(rankCell1);
+                    row.appendChild(rankCell2);
+                }
+                
+                tbody.appendChild(row);
+            });
+        });
+        tableElement.appendChild(thead);
+        tableElement.appendChild(tbody);
+    }
+    
+    function populateCategories() {
+        sidebarTitle.textContent = "Mutual Fund Analysis";
+        categoryList.innerHTML = '';
+        const li = document.createElement('li');
+        li.innerHTML = `<a href="#" data-category-key="score-framework">S.C.O.R.E. Framework</a>`;
+        categoryList.appendChild(li);
+
+        Object.keys(allData).forEach(key => {
+            const li = document.createElement('li');
+            li.innerHTML = `<a href="#" data-category-key="${key}">${allData[key].name}</a>`;
+            categoryList.appendChild(li);
+        });
+        const firstLink = categoryList.querySelector('a[data-category-key="midCap"]');
+        if (firstLink) firstLink.classList.add('active');
+    }
+
+    // --- EVENT LISTENERS ---
+    sidebarToggle.addEventListener('click', () => {
+        analyzerContainer.classList.toggle('sidebar-hidden');
+    });
+
+    categoryList.addEventListener('click', function(e) {
+        e.preventDefault();
+        const link = e.target.closest('a');
+        if (!link || link.classList.contains('active')) return;
+
+        this.querySelectorAll('a').forEach(a => a.classList.remove('active'));
+        link.classList.add('active');
+        
+        const key = link.dataset.categoryKey;
+        if (key === 'score-framework') {
+            showFrameworkPage();
+        } else {
+            renderCategoryData(key);
+        }
+    });
+    
+    collapsibleSectionsContainer.addEventListener('click', function(e) {
+        const header = e.target.closest('.collapsible-header');
+        if (!header) return;
+        
+        header.classList.toggle('active');
+        const content = header.nextElementSibling;
+        if (content.style.maxHeight) {
+            content.style.maxHeight = null;
+        } else {
+            content.style.maxHeight = content.scrollHeight + "px";
+        }
+    });
+
+    rankingTable.addEventListener('click', function(e) {
+        const button = e.target.closest('.table-link-btn');
+        if(!button) return;
+
+        const targetId = button.dataset.targetId;
+        const containerId = targetId + '-container';
+        const targetContainer = document.getElementById(containerId);
+        
+        if (targetContainer) {
+            const header = targetContainer.querySelector('.collapsible-header');
+            const content = targetContainer.querySelector('.collapsible-content');
+
+            if (!content.style.maxHeight) {
+                header.classList.add('active');
+                content.style.maxHeight = content.scrollHeight + "px";
+            }
+            
+            targetContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    });
+
+    // --- Back to Top Button Logic ---
+    window.onscroll = function() {
+        if (document.body.scrollTop > 100 || document.documentElement.scrollTop > 100) {
+            backToTopBtn.style.display = "flex";
+        } else {
+            backToTopBtn.style.display = "none";
+        }
+    };
+
+    backToTopBtn.addEventListener('click', () => {
+        window.scrollTo({top: 0, behavior: 'smooth'});
+    });
+
+    document.addEventListener('DOMContentLoaded', () => {
+        populateCategories();
+        const firstCategoryKey = Object.keys(allData)[0];
+        if (firstCategoryKey) {
+            renderCategoryData(firstCategoryKey);
+        }
+    });
+    </script>
+</body>
+</html>
+
